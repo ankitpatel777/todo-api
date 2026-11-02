@@ -22,6 +22,13 @@ function createTodosRouter(service = store) {
     if (!Number.isInteger(id) || id < 1) {
       throw new HttpError(400, "id must be a positive integer");
     }
+    const title = req.body?.title;
+    if (
+      title !== undefined &&
+      (typeof title !== "string" || title.length < 1 || title.length > 100)
+    ) {
+      throw new HttpError(400, "title must be a string of 1-100 characters");
+    }
     const todo = service.markDone(id);
     if (!todo) {
       throw new HttpError(404, "Todo not found");

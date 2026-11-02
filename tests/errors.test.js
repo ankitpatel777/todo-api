@@ -1,5 +1,6 @@
 const request = require("supertest");
 const { createApp } = require("../src/app");
+const { errorHandler } = require("../src/errors");
 
 describe("error handling", () => {
   it("returns 400 JSON for malformed JSON", async () => {
@@ -31,5 +32,16 @@ describe("error handling", () => {
     expect(res.body).toEqual({ error: "Internal server error" });
     expect(logged).toHaveBeenCalled();
     logged.mockRestore();
+  });
+
+  it("delegates to next when headers were already sent", () => {
+    const err = new Error("too late");
+    const res = { headersSent: true, status: jest.fn() };
+    const next = jest.fn();
+
+    errorHandler(err, {}, res, next);
+
+    expect(next).toHaveBeenCalledWith(err);
+    expect(res.status).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,14 @@
 const request = require("supertest");
 const app = require("../src/app");
 
+describe("GET /health", () => {
+  it("returns ok", async () => {
+    const res = await request(app).get("/health");
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ status: "ok" });
+  });
+});
+
 describe("POST /todos", () => {
   it("creates a todo", async () => {
     const res = await request(app).post("/todos").send({ title: "Buy milk" });
@@ -127,6 +135,16 @@ describe("PATCH /todos/:id", () => {
       expect(res.body).toEqual({ error: "id must be a positive integer" });
     },
   );
+});
+
+describe("PATCH /todos/:id title validation", () => {
+  it("returns 400 for a title over 100 characters", async () => {
+    const res = await request(app)
+      .patch("/todos/1")
+      .send({ title: "a".repeat(101) });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toEqual(expect.any(String));
+  });
 });
 
 describe("DELETE /todos/:id", () => {
