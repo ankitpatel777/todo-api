@@ -164,7 +164,7 @@ describe("PATCH /todos/:id", () => {
     expect(res.body).toEqual(NOT_FOUND_ERROR);
   });
 
-  it.each(["abc", "0", "-1", "1.5"])(
+  it.each(["abc", "0", "-1", "1.5", "0x10", "1e0", "01", "%201"])(
     "returns the 400 error body for id %s",
     async (id) => {
       const res = await request(app).patch(`/todos/${id}`);
@@ -198,7 +198,7 @@ describe("DELETE /todos/:id", () => {
     expect(await listTodos()).toEqual([todo]);
   });
 
-  it.each(["abc", "0", "-1", "1.5"])(
+  it.each(["abc", "0", "-1", "1.5", "0x10", "1e0", "01", "%201"])(
     "returns the 400 error body for id %s",
     async (id) => {
       const res = await request(app).delete(`/todos/${id}`);

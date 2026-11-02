@@ -1,6 +1,13 @@
 const express = require("express");
 const { HttpError } = require("./errors");
 
+function parseId(value) {
+  if (!/^[1-9]\d*$/.test(value)) {
+    throw new HttpError(400, "id must be a positive integer");
+  }
+  return Number(value);
+}
+
 function createTodosRouter(service) {
   const router = express.Router();
 
@@ -17,10 +24,7 @@ function createTodosRouter(service) {
   });
 
   router.patch("/:id", (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id < 1) {
-      throw new HttpError(400, "id must be a positive integer");
-    }
+    const id = parseId(req.params.id);
     const title = req.body?.title;
     if (
       title !== undefined &&
@@ -48,10 +52,7 @@ function createTodosRouter(service) {
   });
 
   router.delete("/:id", (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id < 1) {
-      throw new HttpError(400, "id must be a positive integer");
-    }
+    const id = parseId(req.params.id);
     if (!service.remove(id)) {
       throw new HttpError(404, "Todo not found");
     }
