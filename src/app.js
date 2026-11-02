@@ -1,8 +1,9 @@
 const express = require("express");
 const createTodosRouter = require("./todos.router");
+const { createTodoStore } = require("./todos.store");
 const { notFoundHandler, errorHandler } = require("./errors");
 
-function createApp(service) {
+function createApp(service = createTodoStore()) {
   const app = express();
 
   app.use(express.json());

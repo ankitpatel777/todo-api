@@ -34,6 +34,21 @@ describe("error handling", () => {
     logged.mockRestore();
   });
 
+  it.each([200, 999, "x"])("treats err.status %s as a 500", async (status) => {
+    const logged = jest.spyOn(console, "error").mockImplementation(() => {});
+    const service = {
+      list() {
+        throw Object.assign(new Error("secret"), { status });
+      },
+    };
+
+    const res = await request(createApp(service)).get("/todos");
+
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ error: "Internal server error" });
+    logged.mockRestore();
+  });
+
   it("delegates to next when headers were already sent", () => {
     const err = new Error("too late");
     const res = { headersSent: true, status: jest.fn() };

@@ -1,5 +1,26 @@
 const request = require("supertest");
-const app = require("../src/app");
+const { createApp } = require("../src/app");
+const { createTodoStore } = require("../src/todos.store");
+
+const TITLE_ERROR = { error: "title must be a string of 1-100 characters" };
+const ID_ERROR = { error: "id must be a positive integer" };
+const NOT_FOUND_ERROR = { error: "Todo not found" };
+
+let app;
+
+async function createTodo(title = "Buy milk") {
+  const res = await request(app).post("/todos").send({ title });
+  return res.body;
+}
+
+async function listTodos() {
+  const res = await request(app).get("/todos");
+  return res.body;
+}
+
+beforeEach(() => {
+  app = createApp();
+});
 
 describe("GET /health", () => {
   it("returns ok", async () => {
@@ -13,37 +34,20 @@ describe("POST /todos", () => {
   it("creates a todo", async () => {
     const res = await request(app).post("/todos").send({ title: "Buy milk" });
     expect(res.status).toBe(201);
-    expect(res.body).toEqual({ id: 1, title: "Buy milk", done: false });
+    expect(res.body).toEqual({
+      id: expect.any(Number),
+      title: "Buy milk",
+      done: false,
+    });
   });
 
-  it("returns 400 without a title", async () => {
-    const res = await request(app).post("/todos").send({});
-    expect(res.status).toBe(400);
-    expect(res.body.error).toEqual(expect.any(String));
+  it.each([1, 100])("accepts a %d-character title", async (length) => {
+    const title = "a".repeat(length);
+    const res = await request(app).post("/todos").send({ title });
+    expect(res.status).toBe(201);
+    expect(res.body.title).toBe(title);
   });
 
-  it("returns 400 without a body", async () => {
-    const res = await request(app).post("/todos");
-    expect(res.status).toBe(400);
-  });
-
-  it("returns 400 for a title over 100 characters", async () => {
-    const res = await request(app)
-      .post("/todos")
-      .send({ title: "a".repeat(101) });
-    expect(res.status).toBe(400);
-  });
-
-  it("returns 400 JSON for malformed JSON", async () => {
-    const res = await request(app)
-      .post("/todos")
-      .set("Content-Type", "application/json")
-      .send("{bad");
-    expect(res.status).toBe(400);
-    expect(res.body.error).toEqual(expect.any(String));
-  });
-
-  // Every case here is rejected, so the store still holds only the first todo.
   it.each([
     ["missing", {}],
     ["empty", { title: "" }],
@@ -55,17 +59,20 @@ describe("POST /todos", () => {
   ])("returns the 400 error body when title is %s", async (_name, body) => {
     const res = await request(app).post("/todos").send(body);
     expect(res.status).toBe(400);
-    expect(res.body).toEqual({
-      error: "title must be a string of 1-100 characters",
-    });
+    expect(res.body).toEqual(TITLE_ERROR);
+    expect(await listTodos()).toEqual([]);
+  });
+
+  it("returns 400 without a body", async () => {
+    const res = await request(app).post("/todos");
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual(TITLE_ERROR);
   });
 
   it("returns the 400 error body for a JSON array body", async () => {
     const res = await request(app).post("/todos").send(["Buy milk"]);
     expect(res.status).toBe(400);
-    expect(res.body).toEqual({
-      error: "title must be a string of 1-100 characters",
-    });
+    expect(res.body).toEqual(TITLE_ERROR);
   });
 
   it("returns only an error key for malformed JSON", async () => {
@@ -79,141 +86,168 @@ describe("POST /todos", () => {
 });
 
 describe("GET /todos", () => {
-  it("lists todos", async () => {
+  it("lists todos as JSON", async () => {
+    const todo = await createTodo();
     const res = await request(app).get("/todos");
     expect(res.status).toBe(200);
-    expect(res.body).toEqual([{ id: 1, title: "Buy milk", done: false }]);
-  });
-
-  it("responds with JSON", async () => {
-    const res = await request(app).get("/todos");
     expect(res.headers["content-type"]).toMatch(/application\/json/);
+    expect(res.body).toEqual([todo]);
   });
 });
 
 describe("PATCH /todos/:id", () => {
-  it("marks a todo done", async () => {
-    const res = await request(app).patch("/todos/1");
+  it("marks a todo done when the body has no changes", async () => {
+    const todo = await createTodo();
+    const res = await request(app).patch(`/todos/${todo.id}`);
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ id: 1, title: "Buy milk", done: true });
-  });
-
-  it("returns 404 for an unknown id", async () => {
-    const res = await request(app).patch("/todos/999");
-    expect(res.status).toBe(404);
-    expect(res.body.error).toEqual(expect.any(String));
-  });
-
-  it("returns 400 for an invalid id", async () => {
-    const res = await request(app).patch("/todos/abc");
-    expect(res.status).toBe(400);
-    expect(res.body.error).toEqual(expect.any(String));
-  });
-
-  it("persists the done state", async () => {
-    const res = await request(app).get("/todos");
-    expect(res.body).toEqual([{ id: 1, title: "Buy milk", done: true }]);
+    expect(res.body).toEqual({ ...todo, done: true });
+    expect(await listTodos()).toEqual([{ ...todo, done: true }]);
   });
 
   it("leaves a todo done when patched again", async () => {
-    const res = await request(app).patch("/todos/1");
+    const todo = await createTodo();
+    await request(app).patch(`/todos/${todo.id}`);
+    const res = await request(app).patch(`/todos/${todo.id}`);
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ id: 1, title: "Buy milk", done: true });
+    expect(res.body.done).toBe(true);
   });
+
+  it("renames a todo without changing done", async () => {
+    const todo = await createTodo();
+    const res = await request(app)
+      .patch(`/todos/${todo.id}`)
+      .send({ title: "Buy oat milk" });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ...todo, title: "Buy oat milk" });
+    expect(await listTodos()).toEqual([res.body]);
+  });
+
+  it("sets done from the body", async () => {
+    const todo = await createTodo();
+    await request(app).patch(`/todos/${todo.id}`);
+    const res = await request(app)
+      .patch(`/todos/${todo.id}`)
+      .send({ done: false });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(todo);
+  });
+
+  it("updates title and done together", async () => {
+    const todo = await createTodo();
+    const res = await request(app)
+      .patch(`/todos/${todo.id}`)
+      .send({ title: "New", done: true });
+    expect(res.body).toEqual({ ...todo, title: "New", done: true });
+  });
+
+  it("returns 400 for a title over 100 characters", async () => {
+    const todo = await createTodo();
+    const res = await request(app)
+      .patch(`/todos/${todo.id}`)
+      .send({ title: "a".repeat(101) });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual(TITLE_ERROR);
+    expect(await listTodos()).toEqual([todo]);
+  });
+
+  it.each(["yes", 1, null])("returns 400 when done is %s", async (done) => {
+    const todo = await createTodo();
+    const res = await request(app).patch(`/todos/${todo.id}`).send({ done });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: "done must be a boolean" });
+    expect(await listTodos()).toEqual([todo]);
+  });
+
+  it.each([[{ Done: false }], [{ titel: "x" }]])(
+    "returns 400 for unknown fields in %j",
+    async (body) => {
+      const todo = await createTodo();
+      const res = await request(app).patch(`/todos/${todo.id}`).send(body);
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({ error: "body must include title or done" });
+      expect(await listTodos()).toEqual([todo]);
+    },
+  );
 
   it("returns the 404 error body for an unknown id", async () => {
     const res = await request(app).patch("/todos/999");
     expect(res.status).toBe(404);
-    expect(res.body).toEqual({ error: "Todo not found" });
+    expect(res.body).toEqual(NOT_FOUND_ERROR);
   });
 
-  it.each(["abc", "0", "-1", "1.5"])(
+  it.each(["abc", "0", "-1", "1.5", "0x10", "1e0", "01", "%201"])(
     "returns the 400 error body for id %s",
     async (id) => {
       const res = await request(app).patch(`/todos/${id}`);
       expect(res.status).toBe(400);
-      expect(res.body).toEqual({ error: "id must be a positive integer" });
+      expect(res.body).toEqual(ID_ERROR);
     },
   );
-});
 
-describe("PATCH /todos/:id title validation", () => {
-  it("returns 400 for a title over 100 characters", async () => {
-    const res = await request(app)
-      .patch("/todos/1")
-      .send({ title: "a".repeat(101) });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toEqual(expect.any(String));
+  it("changes only the targeted todo", async () => {
+    const first = await createTodo("First");
+    const second = await createTodo("Second");
+    await request(app).patch(`/todos/${second.id}`);
+    expect(await listTodos()).toEqual([first, { ...second, done: true }]);
   });
 });
 
 describe("DELETE /todos/:id", () => {
-  // Rejected requests run first, while todo 1 still exists.
-  it.each(["abc", "0", "-1", "1.5"])(
+  it("deletes a todo", async () => {
+    const todo = await createTodo();
+    const res = await request(app).delete(`/todos/${todo.id}`);
+    expect(res.status).toBe(204);
+    expect(res.text).toBe("");
+    expect(await listTodos()).toEqual([]);
+  });
+
+  it("leaves todos in place for an unknown id", async () => {
+    const todo = await createTodo();
+    const res = await request(app).delete("/todos/999");
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual(NOT_FOUND_ERROR);
+    expect(await listTodos()).toEqual([todo]);
+  });
+
+  it.each(["abc", "0", "-1", "1.5", "0x10", "1e0", "01", "%201"])(
     "returns the 400 error body for id %s",
     async (id) => {
       const res = await request(app).delete(`/todos/${id}`);
       expect(res.status).toBe(400);
-      expect(res.body).toEqual({ error: "id must be a positive integer" });
+      expect(res.body).toEqual(ID_ERROR);
     },
   );
 
-  it("leaves todos in place for an unknown id", async () => {
-    const res = await request(app).delete("/todos/999");
-    expect(res.status).toBe(404);
-    expect(res.body).toEqual({ error: "Todo not found" });
-    const list = await request(app).get("/todos");
-    expect(list.body).toHaveLength(1);
+  it("returns 404 when deleting or patching a deleted todo", async () => {
+    const todo = await createTodo();
+    await request(app).delete(`/todos/${todo.id}`);
+    const deleted = await request(app).delete(`/todos/${todo.id}`);
+    const patched = await request(app).patch(`/todos/${todo.id}`);
+    expect(deleted.status).toBe(404);
+    expect(patched.status).toBe(404);
+    expect(patched.body).toEqual(NOT_FOUND_ERROR);
   });
 
-  it("deletes a todo", async () => {
-    const res = await request(app).delete("/todos/1");
-    expect(res.status).toBe(204);
-    expect(res.text).toBe("");
-    const list = await request(app).get("/todos");
-    expect(list.body).toEqual([]);
-  });
-
-  it("returns 404 for an unknown id", async () => {
-    const res = await request(app).delete("/todos/1");
-    expect(res.status).toBe(404);
-    expect(res.body.error).toEqual(expect.any(String));
-  });
-
-  it("returns 400 for an invalid id", async () => {
-    const res = await request(app).delete("/todos/abc");
-    expect(res.status).toBe(400);
-    expect(res.body.error).toEqual(expect.any(String));
+  it("does not reuse a deleted id", async () => {
+    const todo = await createTodo();
+    await request(app).delete(`/todos/${todo.id}`);
+    const next = await createTodo();
+    expect(next.id).not.toBe(todo.id);
   });
 });
 
-// These run after DELETE: the store is empty and the next id is 2.
-describe("todo lifecycle", () => {
-  it("returns 404 when patching a deleted todo", async () => {
-    const res = await request(app).patch("/todos/1");
-    expect(res.status).toBe(404);
-    expect(res.body).toEqual({ error: "Todo not found" });
-  });
+describe("todo store", () => {
+  it("does not expose its internal state", () => {
+    const store = createTodoStore();
+    const created = store.create("Buy milk");
+    const expected = { ...created };
 
-  it("accepts a 1-character title and does not reuse a deleted id", async () => {
-    const res = await request(app).post("/todos").send({ title: "a" });
-    expect(res.status).toBe(201);
-    expect(res.body).toEqual({ id: 2, title: "a", done: false });
-  });
+    created.title = "changed";
+    store.update(created.id, {}).title = "changed";
+    store.list()[0].title = "changed";
+    store.list().pop();
 
-  it("accepts a 100-character title", async () => {
-    const title = "a".repeat(100);
-    const res = await request(app).post("/todos").send({ title });
-    expect(res.status).toBe(201);
-    expect(res.body).toEqual({ id: 3, title, done: false });
-  });
-
-  it("changes only the targeted todo", async () => {
-    await request(app).patch("/todos/3");
-    await request(app).delete("/todos/2");
-    const res = await request(app).get("/todos");
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual([{ id: 3, title: "a".repeat(100), done: true }]);
+    expect(store.list()).toEqual([expected]);
   });
 });
 
