@@ -1,8 +1,7 @@
 const express = require("express");
-const store = require("./todos.store");
 const { HttpError } = require("./errors");
 
-function createTodosRouter(service = store) {
+function createTodosRouter(service) {
   const router = express.Router();
 
   router.get("/", (req, res) => {
@@ -29,7 +28,19 @@ function createTodosRouter(service = store) {
     ) {
       throw new HttpError(400, "title must be a string of 1-100 characters");
     }
-    const todo = service.markDone(id);
+    const done = req.body?.done;
+    if (done !== undefined && typeof done !== "boolean") {
+      throw new HttpError(400, "done must be a boolean");
+    }
+    // With nothing to change, PATCH keeps its original meaning: mark done.
+    const changes =
+      title === undefined && done === undefined
+        ? { done: true }
+        : {
+            ...(title !== undefined && { title }),
+            ...(done !== undefined && { done }),
+          };
+    const todo = service.update(id, changes);
     if (!todo) {
       throw new HttpError(404, "Todo not found");
     }

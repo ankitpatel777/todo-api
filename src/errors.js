@@ -13,7 +13,10 @@ function errorHandler(err, req, res, next) {
   if (res.headersSent) {
     return next(err);
   }
-  const status = err.status ?? 500;
+  const status =
+    Number.isInteger(err.status) && err.status >= 400 && err.status < 600
+      ? err.status
+      : 500;
   if (status >= 500) {
     console.error(err);
   }
