@@ -36,7 +36,14 @@ function createTodosRouter(service) {
     if (done !== undefined && typeof done !== "boolean") {
       throw new HttpError(400, "done must be a boolean");
     }
-    // With nothing to change, PATCH keeps its original meaning: mark done.
+    if (
+      title === undefined &&
+      done === undefined &&
+      Object.keys(req.body ?? {}).length > 0
+    ) {
+      throw new HttpError(400, "body must include title or done");
+    }
+    // With an empty body, PATCH keeps its original meaning: mark done.
     const changes =
       title === undefined && done === undefined
         ? { done: true }

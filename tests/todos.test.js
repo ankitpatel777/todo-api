@@ -158,6 +158,17 @@ describe("PATCH /todos/:id", () => {
     expect(await listTodos()).toEqual([todo]);
   });
 
+  it.each([[{ Done: false }], [{ titel: "x" }]])(
+    "returns 400 for unknown fields in %j",
+    async (body) => {
+      const todo = await createTodo();
+      const res = await request(app).patch(`/todos/${todo.id}`).send(body);
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({ error: "body must include title or done" });
+      expect(await listTodos()).toEqual([todo]);
+    },
+  );
+
   it("returns the 404 error body for an unknown id", async () => {
     const res = await request(app).patch("/todos/999");
     expect(res.status).toBe(404);
