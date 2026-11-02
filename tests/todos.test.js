@@ -169,6 +169,23 @@ describe("PATCH /todos/:id", () => {
     },
   );
 
+  it.each([
+    ["application/x-www-form-urlencoded", "done=false"],
+    ["text/plain", '{"done":false}'],
+    ["text/plain", '{"title":"x"}'],
+    ["application/json", "[]"],
+    ["application/json", "[1]"],
+  ])("returns 400 for a %s body of %s", async (type, body) => {
+    const todo = await createTodo();
+    const res = await request(app)
+      .patch(`/todos/${todo.id}`)
+      .set("Content-Type", type)
+      .send(body);
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: "body must be a JSON object" });
+    expect(await listTodos()).toEqual([todo]);
+  });
+
   it("returns the 404 error body for an unknown id", async () => {
     const res = await request(app).patch("/todos/999");
     expect(res.status).toBe(404);

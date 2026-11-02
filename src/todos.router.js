@@ -8,6 +8,15 @@ function parseId(value) {
   return Number(value);
 }
 
+function assertJsonObjectBody(req) {
+  const hasBody =
+    req.headers["transfer-encoding"] !== undefined ||
+    Number(req.headers["content-length"]) > 0;
+  if ((hasBody && req.body === undefined) || Array.isArray(req.body)) {
+    throw new HttpError(400, "body must be a JSON object");
+  }
+}
+
 function createTodosRouter(service) {
   const router = express.Router();
 
@@ -24,6 +33,7 @@ function createTodosRouter(service) {
   });
 
   router.patch("/:id", (req, res) => {
+    assertJsonObjectBody(req);
     const id = parseId(req.params.id);
     const title = req.body?.title;
     if (
