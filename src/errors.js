@@ -6,7 +6,7 @@ class HttpError extends Error {
 }
 
 function notFoundHandler(req, res, next) {
-  next(new HttpError(404, 'Not found'));
+  next(new HttpError(404, "Not found"));
 }
 
 function errorHandler(err, req, res, next) {
@@ -17,7 +17,7 @@ function errorHandler(err, req, res, next) {
   if (status >= 500) {
     console.error(err);
   }
-  const message = status >= 500 ? 'Internal server error' : err.message;
+  const message = status >= 500 ? "Internal server error" : err.message;
   res.status(status).json({ error: message });
 }
 
