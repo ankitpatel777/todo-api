@@ -11,4 +11,17 @@ function create(title) {
   return todo;
 }
 
-module.exports = { list, create };
+function markDone(id) {
+  const todo = todos.find((t) => t.id === id);
+  if (todo) todo.done = true;
+  return todo;
+}
+
+function remove(id) {
+  const index = todos.findIndex((t) => t.id === id);
+  if (index === -1) return false;
+  todos.splice(index, 1);
+  return true;
+}
+
+module.exports = { list, create, markDone, remove };

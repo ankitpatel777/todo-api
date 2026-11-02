@@ -1,12 +1,17 @@
 const express = require('express');
-const todosRouter = require('./todos.router');
+const createTodosRouter = require('./todos.router');
 const { notFoundHandler, errorHandler } = require('./errors');
 
-const app = express();
+function createApp(service) {
+  const app = express();
 
-app.use(express.json());
-app.use('/todos', todosRouter);
-app.use(notFoundHandler);
-app.use(errorHandler);
+  app.use(express.json());
+  app.use('/todos', createTodosRouter(service));
+  app.use(notFoundHandler);
+  app.use(errorHandler);
 
-module.exports = app;
+  return app;
+}
+
+module.exports = createApp();
+module.exports.createApp = createApp;
